@@ -1,0 +1,6 @@
+streamlit>=1.30
+akshare>=1.12
+pandas>=2.0
+plotly>=5.18
+anthropic>=0.45
+supabase>=2.0

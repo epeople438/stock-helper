@@ -1,0 +1,8 @@
+# Streamlit 主题：仿 Claude 的温暖克制风（奶白底 + 陶土色）
+[theme]
+base = "light"
+primaryColor = "#C96442"            # 主色：陶土/赤陶（Anthropic 风）
+backgroundColor = "#FAF9F5"         # 主背景：温暖奶白
+secondaryBackgroundColor = "#F0EEE6"  # 侧栏/卡片：浅米色
+textColor = "#29261B"               # 正文：暖黑
+font = "sans serif"

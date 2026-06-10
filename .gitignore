@@ -1,0 +1,14 @@
+# 不要把这些传到 GitHub
+__pycache__/
+*.pyc
+
+# 编辑器/工具的本地配置
+.claude/
+.DS_Store
+
+# 含密钥/隐私，绝不上传
+.ai_config.json
+.streamlit/secrets.toml
+
+# 本地数据（云端用数据库，本地这个不传）
+watchlist.json
