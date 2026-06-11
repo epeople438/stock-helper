@@ -29,7 +29,9 @@ from analysis.fundamental import (
 from analysis.advisor import build_advice
 import analysis.ai_advisor as ai_advisor
 import analysis.backtest as backtest
-import watchlist.store as wl_store
+import json
+import uuid
+from streamlit_local_storage import LocalStorage
 
 
 # ---------- 页面基础设置 ----------
@@ -146,15 +148,15 @@ def _gate() -> str:
 
     st.markdown("#### 🔒 请输入访问暗号")
     with st.form("gate"):
-        name = st.text_input("你的名字", placeholder="用于区分各自的自选股，如 张三")
+        name = st.text_input("你的名字（可选）", placeholder="只用于打招呼，如 张三")
         pw = st.text_input("访问暗号", type="password")
         if st.form_submit_button("进入", type="primary"):
-            if pw == passcode and name.strip():
+            if pw == passcode:
                 st.session_state.authed = True
-                st.session_state.user = name.strip()
+                st.session_state.user = name.strip() or "我"
                 st.rerun()
             else:
-                st.error("暗号不对，或没填名字")
+                st.error("暗号不对")
     st.stop()
 
 
@@ -411,7 +413,46 @@ def _fmt_cny(x: float) -> str:
     return f"{x:+,.0f} 元"
 
 
+# ---------- 自选股存储：浏览器本地 Local Storage（各人各看各的，不需数据库）----------
+_WL_KEY = "stock_watchlist_v1"
+
+
+def _wl_load(ls):
+    """读取本地存储的自选股。首次挂载组件时可能返回 None（还没加载好），用 session 兜底。"""
+    raw = ls.getItem(_WL_KEY)
+    if raw is not None:
+        try:
+            items = json.loads(raw) if raw else []
+        except Exception:
+            items = []
+        st.session_state["wl_items"] = items if isinstance(items, list) else []
+    elif "wl_items" not in st.session_state:
+        st.session_state["wl_items"] = []
+    return st.session_state["wl_items"]
+
+
+def _wl_save(ls, items):
+    """写回本地存储 + 内存，立即生效。"""
+    st.session_state["wl_items"] = items
+    ls.setItem(_WL_KEY, json.dumps(items, ensure_ascii=False))
+
+
+def _wl_add(ls, market, code, name, buy_date, buy_price, shares):
+    items = list(_wl_load(ls))
+    items.append({
+        "id": uuid.uuid4().hex, "market": market, "code": code.strip(),
+        "name": (name or "").strip(), "buy_date": buy_date,
+        "buy_price": float(buy_price), "shares": int(shares),
+    })
+    _wl_save(ls, items)
+
+
+def _wl_remove(ls, entry_id):
+    _wl_save(ls, [e for e in _wl_load(ls) if e.get("id") != entry_id])
+
+
 def render_watchlist():
+    ls = LocalStorage(key="wl_store")
     st.subheader("➕ 添加自选股")
     with st.form("add_watchlist", clear_on_submit=True):
         c1, c2, c3 = st.columns(3)
@@ -427,14 +468,14 @@ def render_watchlist():
             if not code_in.strip() or buy_price_in <= 0:
                 st.warning("请至少填写「代码」和「买入价」")
             else:
-                wl_store.add_entry(CURRENT_USER, m, code_in, name_in,
-                                   buy_date_in.isoformat(), buy_price_in, int(shares_in))
+                _wl_add(ls, m, code_in, name_in,
+                        buy_date_in.isoformat(), buy_price_in, int(shares_in))
                 st.success("已加入自选股")
                 st.rerun()
 
-    entries = wl_store.load(CURRENT_USER)
+    entries = _wl_load(ls)
     if not entries:
-        st.info("还没有自选股，先在上面添加一只吧。")
+        st.info("还没有自选股，先在上面添加一只吧。数据存在你自己浏览器里，换设备/清缓存会清空。")
         return
 
     st.divider()
@@ -450,7 +491,7 @@ def render_watchlist():
             title = e.get("name") or e["code"]
             head_l.markdown(f"#### {title} &nbsp; `{e['market']} {e['code']}`")
             if head_r.button("删除", key=f"del_{e['id']}"):
-                wl_store.remove_entry(CURRENT_USER, e["id"])
+                _wl_remove(ls, e["id"])
                 st.rerun()
 
             df = None
