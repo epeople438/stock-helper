@@ -418,21 +418,24 @@ _WL_KEY = "stock_watchlist_v1"
 
 
 def _wl_load(ls):
-    """读取本地存储的自选股。首次挂载组件时可能返回 None（还没加载好），用 session 兜底。"""
-    raw = ls.getItem(_WL_KEY)
-    if raw is not None:
+    """
+    读取自选股：只在「本次会话首次」从浏览器本地存储加载一次，之后一律以内存(session)为准。
+    这样异步的 getItem 不会把刚加/刚删的结果覆盖掉，也避免反复读取。
+    """
+    if "wl_items" not in st.session_state:
+        raw = ls.getItem(_WL_KEY)        # 组件首帧未挂载会是 None
+        if raw is None:
+            return []                    # 还没加载好，先返回空；组件挂载后会自动重跑再读
         try:
-            items = json.loads(raw) if raw else []
+            v = json.loads(raw) if raw else []
         except Exception:
-            items = []
-        st.session_state["wl_items"] = items if isinstance(items, list) else []
-    elif "wl_items" not in st.session_state:
-        st.session_state["wl_items"] = []
+            v = []
+        st.session_state["wl_items"] = v if isinstance(v, list) else []
     return st.session_state["wl_items"]
 
 
 def _wl_save(ls, items):
-    """写回本地存储 + 内存，立即生效。"""
+    """写回内存(立即生效) + 浏览器本地存储(后台异步写入，本次渲染不能被 rerun 打断)。"""
     st.session_state["wl_items"] = items
     ls.setItem(_WL_KEY, json.dumps(items, ensure_ascii=False))
 
@@ -453,6 +456,11 @@ def _wl_remove(ls, entry_id):
 
 def render_watchlist():
     ls = LocalStorage(key="wl_store")
+    # 先处理上一轮点的「删除」：放在渲染列表之前，删完不 rerun，让本地存储写入正常完成
+    pending = st.session_state.pop("wl_pending_delete", None)
+    if pending:
+        _wl_remove(ls, pending)
+
     st.subheader("➕ 添加自选股")
     with st.form("add_watchlist", clear_on_submit=True):
         c1, c2, c3 = st.columns(3)
@@ -471,7 +479,6 @@ def render_watchlist():
                 _wl_add(ls, m, code_in, name_in,
                         buy_date_in.isoformat(), buy_price_in, int(shares_in))
                 st.success("已加入自选股")
-                st.rerun()
 
     entries = _wl_load(ls)
     if not entries:
@@ -491,7 +498,7 @@ def render_watchlist():
             title = e.get("name") or e["code"]
             head_l.markdown(f"#### {title} &nbsp; `{e['market']} {e['code']}`")
             if head_r.button("删除", key=f"del_{e['id']}"):
-                _wl_remove(ls, e["id"])
+                st.session_state["wl_pending_delete"] = e["id"]
                 st.rerun()
 
             df = None
