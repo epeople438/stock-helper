@@ -31,6 +31,7 @@ import analysis.ai_advisor as ai_advisor
 import analysis.backtest as backtest
 import json
 import uuid
+import hashlib
 from streamlit_local_storage import LocalStorage
 
 
@@ -120,29 +121,13 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-def _secret(key: str, default: str = "") -> str:
-    """安全读取 secret：没有 secrets.toml 时直接返回默认值，避免本地报红。"""
-    locs = [Path.home() / ".streamlit" / "secrets.toml",
-            Path(__file__).resolve().parent / ".streamlit" / "secrets.toml"]
-    if not any(p.exists() for p in locs):
-        return default
-    try:
-        return st.secrets.get(key, default)
-    except Exception:
-        return default
+# 访问暗号（存的是 sha256 哈希，不可逆——改暗号只需改这个哈希再推 GitHub，
+# 完全不需要任何后台/密钥配置）。当前暗号：biaoge
+_PASSCODE_SHA256 = "bf9ece0bbc897f58c04564ba9eeaa0b4bf28fe3f5698c3ec4539f7282f9c406d"
 
 
 def _gate() -> str:
-    """
-    访问暗号 + 用户名门禁。返回当前用户名（用于区分各自的自选股）。
-    - 部署到云端：在 st.secrets 设 APP_PASSCODE 后启用门禁（输对暗号+填名字才进）。
-    - 本地运行：没设 APP_PASSCODE 就不拦，用户名默认「本地」。
-    """
-    passcode = _secret("APP_PASSCODE", "")
-
-    if not passcode:                       # 本地/未配置：直接放行
-        return st.session_state.get("user", "本地")
-
+    """访问暗号门禁。返回当前用户名（仅用于打招呼）。"""
     if st.session_state.get("authed"):
         return st.session_state["user"]
 
@@ -151,7 +136,7 @@ def _gate() -> str:
         name = st.text_input("你的名字（可选）", placeholder="只用于打招呼，如 张三")
         pw = st.text_input("访问暗号", type="password")
         if st.form_submit_button("进入", type="primary"):
-            if pw == passcode:
+            if hashlib.sha256(pw.encode()).hexdigest() == _PASSCODE_SHA256:
                 st.session_state.authed = True
                 st.session_state.user = name.strip() or "我"
                 st.rerun()
