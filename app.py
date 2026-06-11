@@ -116,7 +116,7 @@ section[data-testid="stSidebar"] > div:first-child {
 st.markdown("""
 <div class="app-header">
   <h1>📈 股票分析助手</h1>
-  <p>港股 · 美股 · A股 &nbsp;|&nbsp; 看图 · 读财报 · 管自选 · 做回测，你的私人投资小助理</p>
+  <p>A股 &nbsp;|&nbsp; 看图 · 读财报 · 管自选 · 做回测，你的私人投资小助理</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -198,13 +198,20 @@ def load_revenue_profit(market, code):
     return get_revenue_profit(market, code)
 
 
+# 当前开放的市场。想恢复港股/美股，改回 ["A股", "港股", "美股"] 即可。
+MARKETS = ["A股"]
+_CODE_HINT = {"A股": "如 600519", "港股": "如 00700", "美股": "如 AAPL"}
+
+
 # ---------- 侧边栏：输入区 ----------
 with st.sidebar:
     st.header("查询条件")
-    market = st.radio("市场", ["A股", "港股", "美股"], horizontal=True)
+    if len(MARKETS) > 1:
+        market = st.radio("市场", MARKETS, horizontal=True)
+    else:
+        market = MARKETS[0]
 
-    placeholder = {"A股": "如 600519", "港股": "如 00700", "美股": "如 AAPL"}[market]
-    code = st.text_input("股票代码", placeholder=placeholder)
+    code = st.text_input("股票代码", placeholder=_CODE_HINT[market])
 
     today = date.today()
     start = st.date_input("开始日期", today - timedelta(days=365))
@@ -448,9 +455,13 @@ def render_watchlist():
 
     st.subheader("➕ 添加自选股")
     with st.form("add_watchlist", clear_on_submit=True):
-        c1, c2, c3 = st.columns(3)
-        m = c1.selectbox("市场", ["A股", "港股", "美股"])
-        code_in = c2.text_input("代码", placeholder="如 600519 / 00700 / AAPL")
+        if len(MARKETS) > 1:
+            c1, c2, c3 = st.columns(3)
+            m = c1.selectbox("市场", MARKETS)
+        else:
+            m = MARKETS[0]
+            c2, c3 = st.columns(2)
+        code_in = c2.text_input("代码", placeholder=_CODE_HINT[m])
         name_in = c3.text_input("名称（可选）", placeholder="如 贵州茅台")
         c4, c5, c6 = st.columns(3)
         buy_date_in = c4.date_input("买入日期", date.today() - timedelta(days=30))
@@ -671,6 +682,6 @@ if go_btn:
         render_fundamental()
 else:
     with tab_tech:
-        st.info("👈 在左侧选择市场、输入代码、勾选指标，点「查询」开始。")
+        st.info("👈 在左侧输入股票代码、勾选指标，点「查询」开始。")
     with tab_fund:
         st.info("基本面（估值 + 营收利润）目前对 A股 完整支持。查询后在此查看。")
